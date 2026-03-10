@@ -1,0 +1,45 @@
+Role: Act as a Senior Full-Stack Engineer and System Architect.
+
+Objective: Build a complete College Attendance Management System web application with two distinct portals (Teacher/Admin and Student) using the MERN stack (MongoDB, Express, React, Node.js) or PERN stack (PostgreSQL, Express, React, Node.js).
+
+1. Database Schema Design:
+
+Design a relational database schema. Tables must include: Users (Role: Teacher/Student), Subjects (Mapped to Teachers), Students (Mapped to Subjects), Attendance (Linked to Date, Subject, and Student), and Leaves (Supporting Medical/Personal types and 'Status' for approvals).
+
+Ensure Referential Integrity: if a student is marked on leave, the attendance status should reflect "Excused."
+
+2. Teacher Portal Functionalities:
+
+Authentication: Login via Faculty ID.
+
+Attendance UI: A dynamic table to mark attendance by selecting Subject, Semester, and Time-Slot. Include a "Mark All Present" toggle.
+
+Leave Management: A dashboard to view pending Student Medical/Personal leave requests with "Approve/Reject" actions.
+
+Analytics: Use a charting library (like Chart.js) to display a bar graph of class attendance trends and a "Low Attendance Alert" list for students under 75%.
+
+3. Student Portal Functionalities:
+
+Authentication: Login via Roll Number/Student ID.
+
+Dashboard: Display an overall attendance percentage using a Circular Progress Bar.
+
+Subject-wise View: A detailed breakdown of every subject and total classes attended vs. missed.
+
+Leave Application: A form to apply for leaves with a field for "Reason" and a "File Upload" for medical certificates.
+
+4. Technical Implementation:
+
+Create Express.js API Endpoints for all CRUD operations.
+
+Implement JWT (JSON Web Tokens) for secure, role-based session handling.
+
+Write a utility function to calculate attendance percentages dynamically: (Attended + Excused) / Total Classes * 100.
+
+5. Integration & UI/UX:
+
+Use Tailwind CSS for a clean, professional "College Portal" aesthetic.
+
+Ensure the design is responsive for mobile use (so teachers can mark attendance on tablets).
+
+Deliverable: Provide the structured folder hierarchy, the Database Schema SQL/NoSQL code, the core Backend Controllers, and the Frontend Dashboard components.
