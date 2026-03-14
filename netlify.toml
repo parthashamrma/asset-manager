@@ -24,6 +24,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/teacher/attendance"
+  to = "/.netlify/functions/attendance"
+  status = 200
+
+[[redirects]]
+  from = "/api/teacher/attendance/*"
+  to = "/.netlify/functions/attendance"
+  status = 200
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api"
   status = 200
