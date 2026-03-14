@@ -1,9 +1,17 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { users } from '../../shared/schema.js';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+
+// Import schema directly - copy the users schema here since imports might fail
+const users = {
+  id: 'id',
+  username: 'username',
+  password: 'password',
+  name: 'name',
+  role: 'role'
+};
 
 // Database connection
 const connectionString = process.env.DATABASE_URL;
@@ -34,10 +42,16 @@ export async function handler(event, context) {
     if (httpMethod === 'POST' && path === '/api/auth/login') {
       const { username, password } = JSON.parse(body);
       
-      // Find user in database
-      const user = await db.select().from(users).where(eq(users.username, username)).limit(1);
+      // Find user in database - use raw SQL to avoid schema import issues
+      const userQuery = `
+        SELECT id, username, password, name, role 
+        FROM users 
+        WHERE username = $1
+        LIMIT 1
+      `;
+      const userResult = await client.unsafe(userQuery, [username]);
       
-      if (user.length === 0) {
+      if (userResult.length === 0) {
         return {
           statusCode: 401,
           headers: corsHeaders,
@@ -45,7 +59,7 @@ export async function handler(event, context) {
         };
       }
 
-      const userData = user[0];
+      const userData = userResult[0];
       
       // Compare hashed passwords using bcrypt
       if (!(await bcrypt.compare(password, userData.password))) {
@@ -94,10 +108,16 @@ export async function handler(event, context) {
       try {
         const decoded = jwt.verify(token, process.env.SESSION_SECRET || 'fallback-secret');
         
-        // Get user from database
-        const user = await db.select().from(users).where(eq(users.id, decoded.id)).limit(1);
+        // Get user from database - use raw SQL
+        const userQuery = `
+          SELECT id, username, name, role 
+          FROM users 
+          WHERE id = $1
+          LIMIT 1
+        `;
+        const userResult = await client.unsafe(userQuery, [decoded.id]);
         
-        if (user.length === 0) {
+        if (userResult.length === 0) {
           return {
             statusCode: 401,
             headers: corsHeaders,
@@ -110,10 +130,10 @@ export async function handler(event, context) {
           headers: corsHeaders,
           body: JSON.stringify({
             user: {
-              id: user[0].id,
-              username: user[0].username,
-              role: user[0].role,
-              name: user[0].name
+              id: userResult[0].id,
+              username: userResult[0].username,
+              role: userResult[0].role,
+              name: userResult[0].name
             }
           })
         };
@@ -146,7 +166,10 @@ export async function handler(event, context) {
     return {
       statusCode: 500,
       headers: corsHeaders,
-      body: JSON.stringify({ message: 'Internal server error' })
+      body: JSON.stringify({ 
+        message: 'Internal server error',
+        error: error.message 
+      })
     };
   }
 }

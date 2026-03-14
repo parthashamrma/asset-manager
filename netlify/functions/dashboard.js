@@ -1,7 +1,5 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { users, subjects, attendance, studentSubjects, leaves } from '../../shared/schema.js';
-import { eq, and, count, sum } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 
 // Database connection
@@ -63,30 +61,39 @@ export async function handler(event, context) {
         };
       }
 
-      // Get teacher's subjects
-      const teacherSubjects = await db.select().from(subjects).where(eq(subjects.teacherId, decoded.id));
+      // Get teacher's subjects using raw SQL
+      const subjectsQuery = `
+        SELECT id, name, code, teacher_id, semester 
+        FROM subjects 
+        WHERE teacher_id = $1
+      `;
+      const teacherSubjects = await client.unsafe(subjectsQuery, [decoded.id]);
       
       // Get total students
-      const totalStudents = await db.select({ count: count() }).from(studentSubjects);
+      const studentsQuery = `SELECT COUNT(*) as count FROM student_subjects`;
+      const totalStudentsResult = await client.unsafe(studentsQuery);
       
-      // Get attendance statistics
-      const attendanceStats = await db.select({
-        subjectName: subjects.name,
-        attended: count(attendance.id),
-        total: count(studentSubjects.studentId)
-      })
-      .from(subjects)
-      .leftJoin(studentSubjects, eq(subjects.id, studentSubjects.subjectId))
-      .leftJoin(attendance, and(
-        eq(attendance.subjectId, subjects.id),
-        eq(attendance.studentId, studentSubjects.studentId),
-        eq(attendance.status, 'present')
-      ))
-      .where(eq(subjects.teacherId, decoded.id))
-      .groupBy(subjects.name);
+      // Get attendance statistics using raw SQL
+      const attendanceQuery = `
+        SELECT 
+          s.name as subject_name,
+          COUNT(a.id) as attended,
+          COUNT(ss.student_id) as total
+        FROM subjects s
+        LEFT JOIN student_subjects ss ON s.id = ss.subject_id
+        LEFT JOIN attendance a ON (
+          a.subject_id = s.id AND 
+          a.student_id = ss.student_id AND 
+          a.status = 'present'
+        )
+        WHERE s.teacher_id = $1
+        GROUP BY s.name
+      `;
+      const attendanceStats = await client.unsafe(attendanceQuery, [decoded.id]);
 
       // Get pending leaves
-      const pendingLeaves = await db.select({ count: count() }).from(leaves).where(eq(leaves.status, 'pending'));
+      const leavesQuery = `SELECT COUNT(*) as count FROM leaves WHERE status = 'pending'`;
+      const pendingLeavesResult = await client.unsafe(leavesQuery);
 
       // Calculate overall attendance rate
       const totalAttended = attendanceStats.reduce((sum, stat) => sum + (stat.attended || 0), 0);
@@ -97,12 +104,12 @@ export async function handler(event, context) {
         statusCode: 200,
         headers: corsHeaders,
         body: JSON.stringify({
-          totalStudents: totalStudents[0]?.count || 0,
+          totalStudents: parseInt(totalStudentsResult[0]?.count || 0),
           totalSubjects: teacherSubjects.length,
           attendanceRate: Math.round(attendanceRate * 10) / 10,
-          pendingLeaves: pendingLeaves[0]?.count || 0,
+          pendingLeaves: parseInt(pendingLeavesResult[0]?.count || 0),
           subjects: attendanceStats.map(stat => ({
-            subjectName: stat.subjectName,
+            subjectName: stat.subject_name,
             attended: stat.attended || 0,
             total: stat.total || 0,
             percentage: stat.total > 0 ? Math.round((stat.attended / stat.total) * 100) : 0
@@ -120,33 +127,30 @@ export async function handler(event, context) {
         };
       }
 
-      // Get student's subjects
-      const studentSubjectsData = await db.select({
-        subjectName: subjects.name,
-        subjectId: subjects.id
-      })
-      .from(studentSubjects)
-      .leftJoin(subjects, eq(subjects.id, studentSubjects.subjectId))
-      .where(eq(studentSubjects.studentId, decoded.id));
+      // Get student's subjects using raw SQL
+      const subjectsQuery = `
+        SELECT s.name as subject_name, s.id as subject_id
+        FROM student_subjects ss
+        LEFT JOIN subjects s ON s.id = ss.subject_id
+        WHERE ss.student_id = $1
+      `;
+      const studentSubjectsData = await client.unsafe(subjectsQuery, [decoded.id]);
 
       // Get attendance for each subject
       const attendanceData = await Promise.all(
         studentSubjectsData.map(async (subject) => {
-          const attendanceRecords = await db.select({
-            attended: count(attendance.id)
-          })
-          .from(attendance)
-          .where(and(
-            eq(attendance.subjectId, subject.subjectId),
-            eq(attendance.studentId, decoded.id),
-            eq(attendance.status, 'present')
-          ));
+          const attendanceQuery = `
+            SELECT COUNT(*) as attended
+            FROM attendance
+            WHERE subject_id = $1 AND student_id = $2 AND status = 'present'
+          `;
+          const attendanceResult = await client.unsafe(attendanceQuery, [subject.subject_id, decoded.id]);
 
           return {
-            subjectName: subject.subjectName,
-            attended: attendanceRecords[0]?.attended || 0,
+            subjectName: subject.subject_name,
+            attended: parseInt(attendanceResult[0]?.attended || 0),
             total: 20, // Assuming 20 classes per subject
-            percentage: Math.round(((attendanceRecords[0]?.attended || 0) / 20) * 100)
+            percentage: Math.round(((parseInt(attendanceResult[0]?.attended || 0)) / 20) * 100)
           };
         })
       );
@@ -178,7 +182,10 @@ export async function handler(event, context) {
     return {
       statusCode: 500,
       headers: corsHeaders,
-      body: JSON.stringify({ message: 'Internal server error' })
+      body: JSON.stringify({ 
+        message: 'Internal server error',
+        error: error.message 
+      })
     };
   }
 }
