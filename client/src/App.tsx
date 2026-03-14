@@ -14,9 +14,15 @@ import { LandingPage } from "@/pages/landing";
 import { TeacherDashboard } from "@/pages/teacher/dashboard";
 import { TeacherAttendance } from "@/pages/teacher/attendance";
 import { TeacherLeaves } from "@/pages/teacher/leaves";
+import { TeacherAttendanceRecords } from "@/pages/teacher/attendance-records";
 import { TeacherAnalytics } from "@/pages/teacher/analytics";
+import { TeacherAssignments } from "@/pages/teacher/assignments";
+import { TeacherSubjectNotes } from "@/pages/teacher/subject-notes";
 import { StudentDashboard } from "@/pages/student/dashboard";
 import { StudentLeaves } from "@/pages/student/leaves";
+import { StudentAssignments } from "@/pages/student/assignments";
+import { StudentSubjectNotes } from "@/pages/student/subject-notes";
+import { StudentTimetable } from "@/pages/student/timetable";
 
 function Router() {
   return (
@@ -34,6 +40,11 @@ function Router() {
           <PortalLayout><TeacherAttendance /></PortalLayout>
         </AuthGuard>
       </Route>
+      <Route path="/teacher/attendance-records">
+        <AuthGuard allowedRoles={['teacher']}>
+          <PortalLayout><TeacherAttendanceRecords /></PortalLayout>
+        </AuthGuard>
+      </Route>
       <Route path="/teacher/leaves">
         <AuthGuard allowedRoles={['teacher']}>
           <PortalLayout><TeacherLeaves /></PortalLayout>
@@ -44,6 +55,16 @@ function Router() {
           <PortalLayout><TeacherAnalytics /></PortalLayout>
         </AuthGuard>
       </Route>
+      <Route path="/teacher/assignments">
+        <AuthGuard allowedRoles={['teacher']}>
+          <PortalLayout><TeacherAssignments /></PortalLayout>
+        </AuthGuard>
+      </Route>
+      <Route path="/teacher/subject-notes">
+        <AuthGuard allowedRoles={['teacher']}>
+          <PortalLayout><TeacherSubjectNotes /></PortalLayout>
+        </AuthGuard>
+      </Route>
 
       {/* Student Routes */}
       <Route path="/student">
@@ -51,9 +72,24 @@ function Router() {
           <PortalLayout><StudentDashboard /></PortalLayout>
         </AuthGuard>
       </Route>
+      <Route path="/student/timetable">
+        <AuthGuard allowedRoles={['student']}>
+          <PortalLayout><StudentTimetable /></PortalLayout>
+        </AuthGuard>
+      </Route>
       <Route path="/student/leaves">
         <AuthGuard allowedRoles={['student']}>
           <PortalLayout><StudentLeaves /></PortalLayout>
+        </AuthGuard>
+      </Route>
+      <Route path="/student/assignments">
+        <AuthGuard allowedRoles={['student']}>
+          <PortalLayout><StudentAssignments /></PortalLayout>
+        </AuthGuard>
+      </Route>
+      <Route path="/student/subject-notes">
+        <AuthGuard allowedRoles={['student']}>
+          <PortalLayout><StudentSubjectNotes /></PortalLayout>
         </AuthGuard>
       </Route>
 

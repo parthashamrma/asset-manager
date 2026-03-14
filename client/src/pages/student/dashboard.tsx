@@ -2,8 +2,9 @@ import { useStudentDashboard } from "@/hooks/use-student";
 import { useAuth } from "@/hooks/use-auth";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, TrendingUp, AlertCircle } from "lucide-react";
+import { Loader2, TrendingUp, AlertCircle, FileText, BookOpen, CalendarDays, ArrowRight, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Link } from "wouter";
 
 export function StudentDashboard() {
   const { user } = useAuth();
@@ -22,7 +23,7 @@ export function StudentDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div>
-        <h1 className="text-3xl font-display font-bold text-foreground">Student Portal</h1>
+        <h1 className="text-3xl font-display font-bold text-foreground">Attendsys Pro Portal</h1>
         <p className="text-muted-foreground mt-1">Welcome back, {user?.name}. Here's your attendance standing.</p>
       </div>
 
@@ -45,6 +46,43 @@ export function StudentDashboard() {
               </div>
             )}
           </div>
+        </Card>
+
+        {/* Quick Actions Card */}
+        <Card className="lg:col-span-1 border-border/50 shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-display">Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Link href="/student/timetable">
+              <div className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 cursor-pointer transition-all group">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-foreground">View Timetable</h4>
+                    <p className="text-sm text-muted-foreground">Check class schedule</p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-transform" />
+              </div>
+            </Link>
+            <Link href="/student/leaves">
+              <div className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 cursor-pointer transition-all group">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <CalendarDays className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-foreground">Leave Requests</h4>
+                    <p className="text-sm text-muted-foreground">Apply for leave</p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-transform" />
+              </div>
+            </Link>
+          </CardContent>
         </Card>
 
         {/* Breakdown Table */}

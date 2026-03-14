@@ -1,6 +1,13 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ClipboardCheck, Users, CalendarDays, ArrowRight } from "lucide-react";
+import { 
+  ClipboardCheck, 
+  Users, 
+  CalendarDays, 
+  ArrowRight,
+  FileText,
+  BookOpen
+} from "lucide-react";
 import { Link } from "wouter";
 
 export function TeacherDashboard() {
@@ -16,7 +23,7 @@ export function TeacherDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
-        <h1 className="text-3xl font-display font-bold text-foreground">Welcome back, Prof. {user?.name}</h1>
+        <h1 className="text-3xl font-display font-bold text-foreground">Attendsys Pro Dashboard</h1>
         <p className="text-muted-foreground mt-1">Here is what's happening today.</p>
       </div>
 
@@ -56,6 +63,20 @@ export function TeacherDashboard() {
                 <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-transform" />
               </div>
             </Link>
+            <Link href="/teacher/attendance-records">
+              <div className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 cursor-pointer transition-all group">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <CalendarDays className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-foreground">View Records</h4>
+                    <p className="text-sm text-muted-foreground">Browse all saved attendance</p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-transform" />
+              </div>
+            </Link>
             <Link href="/teacher/leaves">
               <div className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 cursor-pointer transition-all group">
                 <div className="flex items-center gap-3">
@@ -63,7 +84,7 @@ export function TeacherDashboard() {
                     <CalendarDays className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="font-medium text-foreground">Review Leaves</h4>
+                    <h4 className="font-medium text-foreground">Review Pending Leaves</h4>
                     <p className="text-sm text-muted-foreground">5 pending student requests</p>
                   </div>
                 </div>

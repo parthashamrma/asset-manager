@@ -8,7 +8,10 @@ import {
   BarChart3, 
   LogOut,
   GraduationCap,
-  Menu
+  Menu,
+  FileText,
+  BookOpen,
+  Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -29,12 +32,17 @@ export function PortalLayout({ children }: PortalLayoutProps) {
   const teacherNav = [
     { label: "Dashboard", href: "/teacher", icon: LayoutDashboard },
     { label: "Mark Attendance", href: "/teacher/attendance", icon: ClipboardCheck },
+    { label: "Assignments", href: "/teacher/assignments", icon: FileText },
+    { label: "Subject Notes", href: "/teacher/subject-notes", icon: BookOpen },
     { label: "Leave Requests", href: "/teacher/leaves", icon: CalendarDays },
     { label: "Analytics", href: "/teacher/analytics", icon: BarChart3 },
   ];
 
   const studentNav = [
     { label: "Dashboard", href: "/student", icon: LayoutDashboard },
+    { label: "Timetable", href: "/student/timetable", icon: Calendar },
+    { label: "Assignments", href: "/student/assignments", icon: FileText },
+    { label: "Subject Notes", href: "/student/subject-notes", icon: BookOpen },
     { label: "My Leaves", href: "/student/leaves", icon: CalendarDays },
   ];
 
@@ -71,7 +79,7 @@ export function PortalLayout({ children }: PortalLayoutProps) {
             <GraduationCap className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-display font-bold text-lg leading-tight">Astra Portal</h1>
+            <h1 className="font-display font-bold text-lg leading-tight">Attendsys Pro Portal</h1>
             <p className="text-xs text-muted-foreground uppercase tracking-wider">{user?.role}</p>
           </div>
         </div>
@@ -97,7 +105,7 @@ export function PortalLayout({ children }: PortalLayoutProps) {
         <header className="lg:hidden h-16 border-b border-border bg-card px-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <GraduationCap className="w-6 h-6 text-primary" />
-            <span className="font-display font-bold text-lg">Astra</span>
+            <span className="font-display font-bold text-lg">Attendsys Pro</span>
           </div>
           
           <Sheet>
@@ -108,7 +116,7 @@ export function PortalLayout({ children }: PortalLayoutProps) {
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0 flex flex-col">
               <div className="p-6 border-b border-border">
-                <h1 className="font-display font-bold text-xl">Astra Portal</h1>
+                <h1 className="font-display font-bold text-xl">Attendsys Pro Portal</h1>
                 <p className="text-sm text-muted-foreground capitalize">{user?.role}</p>
               </div>
               <div className="flex-1 p-4">

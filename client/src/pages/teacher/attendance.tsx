@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { useTeacherSubjects, useSubjectStudents, useMarkAttendance } from "@/hooks/use-teacher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, UserCheck, UserX, AlertCircle } from "lucide-react";
+import { Loader2, UserCheck, UserX, AlertCircle, Users, Download } from "lucide-react";
 
 export function TeacherAttendance() {
   const { toast } = useToast();
@@ -16,7 +16,6 @@ export function TeacherAttendance() {
   const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [date, setDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [timeSlot, setTimeSlot] = useState<string>("");
-  const [markAllPresent, setMarkAllPresent] = useState(false);
   
   // Local state to track selections before submitting
   const [attendanceRecords, setAttendanceRecords] = useState<Record<number, 'present'|'absent'|'excused'>>({});
@@ -25,19 +24,40 @@ export function TeacherAttendance() {
   const { data: students, isLoading: loadingStudents } = useSubjectStudents(subjectId);
   const markMutation = useMarkAttendance();
 
-  // Initialize records when students load or 'Mark All' toggles
-  useMemo(() => {
-    if (students) {
+  // Initialize attendance records when students load
+  useEffect(() => {
+    if (students && students.length > 0) {
       const initial: Record<number, 'present'|'absent'|'excused'> = {};
       students.forEach((s: any) => {
-        initial[s.studentId] = markAllPresent ? 'present' : (attendanceRecords[s.studentId] || 'absent');
+        initial[s.studentId] = 'absent'; // Default to absent
       });
       setAttendanceRecords(initial);
     }
-  }, [students, markAllPresent]);
+  }, [students]);
 
+  // Reset when subject changes
+  useEffect(() => {
+    setAttendanceRecords({});
+  }, [selectedSubject]);
+
+  // Handle individual student status change
   const handleStatusChange = (studentId: number, status: 'present'|'absent'|'excused') => {
-    setAttendanceRecords(prev => ({ ...prev, [studentId]: status }));
+    setAttendanceRecords(prev => {
+      const newRecords = { ...prev };
+      newRecords[studentId] = status;
+      return newRecords;
+    });
+  };
+
+  // Handle "Mark All Present"
+  const handleMarkAllPresent = (checked: boolean) => {
+    if (students && students.length > 0) {
+      const newRecords: Record<number, 'present'|'absent'|'excused'> = {};
+      students.forEach((s: any) => {
+        newRecords[s.studentId] = checked ? 'present' : 'absent';
+      });
+      setAttendanceRecords(newRecords);
+    }
   };
 
   const onSubmit = async () => {
@@ -46,25 +66,101 @@ export function TeacherAttendance() {
       return;
     }
 
+    // Create records payload
     const recordsPayload = Object.entries(attendanceRecords).map(([id, status]) => ({
       studentId: parseInt(id),
       status
     }));
 
+    console.log("🔍 Submitting attendance:", {
+      subjectId,
+      date,
+      timeSlot,
+      attendanceRecords,
+      recordsPayload,
+      students: students.map(s => ({
+        studentId: s.studentId,
+        studentName: s.studentName,
+        rollNumber: s.rollNumber
+      }))
+    });
+
     try {
-      await markMutation.mutateAsync({
-        subjectId,
-        date,
-        timeSlot,
-        records: recordsPayload
+      console.log("📤 Sending to API...");
+      const response = await fetch('/api/teacher/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjectId,
+          date,
+          timeSlot,
+          records: recordsPayload
+        }),
+        credentials: 'include'
       });
-      toast({ title: "Success", description: "Attendance recorded successfully." });
-      // Reset form slightly
-      setSelectedSubject("");
-      setTimeSlot("");
-      setAttendanceRecords({});
-      setMarkAllPresent(false);
+
+      console.log("📤 API Response:", response.status, response.statusText);
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error("❌ API Error:", errorData);
+        toast({ 
+          title: "Error", 
+          description: `Failed to save attendance: ${errorData}`, 
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      const result = await response.json();
+      console.log("✅ API Result:", result);
+      
+      if (result.message) {
+        toast({ title: "Success", description: result.message });
+        
+        // Reset form
+        setSelectedSubject("");
+        setTimeSlot("");
+        setAttendanceRecords({});
+        
+        console.log("✅ Attendance saved and form reset");
+      } else {
+        toast({ title: "Error", description: "Failed to save attendance", variant: "destructive" });
+      }
     } catch (error: any) {
+      console.error("❌ Submission error:", error);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const downloadAttendanceCSV = async () => {
+    if (!subjectId || !date) {
+      toast({ title: "Error", description: "Please select a subject and date first", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/teacher/download-attendance/${subjectId}/${date}`, {
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download CSV');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance-${subjectId}-${date}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({ title: "Success", description: "Attendance CSV downloaded successfully" });
+    } catch (error: any) {
+      console.error("❌ CSV download error:", error);
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
@@ -112,7 +208,7 @@ export function TeacherAttendance() {
           <div className="bg-secondary/50 p-4 border-b border-border flex justify-between items-center">
             <h3 className="font-semibold">Student List ({students.length})</h3>
             <div className="flex items-center space-x-2">
-              <Switch id="mark-all" checked={markAllPresent} onCheckedChange={setMarkAllPresent} />
+              <Switch id="mark-all" onCheckedChange={handleMarkAllPresent} />
               <Label htmlFor="mark-all" className="cursor-pointer">Mark All Present</Label>
             </div>
           </div>
@@ -159,13 +255,22 @@ export function TeacherAttendance() {
             )}
           </div>
           {students.length > 0 && (
-            <div className="p-4 bg-muted/20 border-t border-border flex justify-end">
+            <div className="p-4 bg-muted/20 border-t border-border flex justify-between gap-2">
               <Button 
                 onClick={onSubmit} 
                 disabled={markMutation.isPending || !date || !timeSlot}
                 className="w-full md:w-auto shadow-md"
               >
                 {markMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : "Save Attendance"}
+              </Button>
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => downloadAttendanceCSV()}
+                disabled={!subjectId}
+                className="shadow-md"
+              >
+                📊 Download CSV
               </Button>
             </div>
           )}

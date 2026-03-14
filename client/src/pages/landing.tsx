@@ -49,7 +49,7 @@ export function LandingPage() {
         name: formData.get("name") as string,
         role: formData.get("role") as 'teacher' | 'student',
       });
-      toast({ title: "Registration Successful", description: "Welcome to Astra!" });
+      toast({ title: "Registration Successful", description: "Welcome to Attendsys Pro!" });
     } catch (err: any) {
       toast({ title: "Registration Failed", description: err.message, variant: "destructive" });
     } finally {
@@ -73,7 +73,7 @@ export function LandingPage() {
             <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/25">
               <GraduationCap className="w-8 h-8" />
             </div>
-            <span className="font-display font-bold text-3xl text-foreground">Astra</span>
+            <span className="font-display font-bold text-3xl text-foreground">Attendsys Pro</span>
           </div>
           
           <h1 className="text-5xl font-display font-extrabold text-foreground leading-tight text-balance">
@@ -101,60 +101,52 @@ export function LandingPage() {
           <CardHeader className="text-center pb-2">
             <div className="lg:hidden flex items-center justify-center gap-2 mb-4">
               <GraduationCap className="w-8 h-8 text-primary" />
-              <span className="font-display font-bold text-2xl">Astra</span>
+              <span className="font-display font-bold text-2xl">Attendsys Pro</span>
             </div>
             <CardTitle className="font-display text-2xl">Welcome Back</CardTitle>
             <CardDescription>Enter your credentials to access the portal</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="register">Register</TabsTrigger>
+            <Tabs defaultValue="student-login" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-6">
+                <TabsTrigger value="student-login">Student Login</TabsTrigger>
+                <TabsTrigger value="teacher-login">Teacher Login</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="login">
+              <TabsContent value="student-login">
                 <form onSubmit={onLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="login-username">Roll No / Faculty ID</Label>
-                    <Input id="login-username" name="username" required className="bg-white/50" />
+                    <Label htmlFor="login-username">Roll Number</Label>
+                    <Input id="login-username" name="username" placeholder="Enter your roll number" required className="bg-white/50" />
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <Label htmlFor="login-password">Password</Label>
                       <span className="text-xs text-primary hover:underline cursor-pointer">Forgot password?</span>
                     </div>
-                    <Input id="login-password" name="password" type="password" required className="bg-white/50" />
+                    <Input id="login-password" name="password" type="password" placeholder="Enter your password" required className="bg-white/50" />
                   </div>
                   <Button type="submit" className="w-full mt-4 h-11 text-base font-medium shadow-md transition-transform hover:-translate-y-0.5" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Sign In"}
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Student Login"}
                   </Button>
                 </form>
               </TabsContent>
 
-              <TabsContent value="register">
-                <form onSubmit={onRegister} className="space-y-4">
+              <TabsContent value="teacher-login">
+                <form onSubmit={onLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="reg-name">Full Name</Label>
-                    <Input id="reg-name" name="name" required className="bg-white/50" />
+                    <Label htmlFor="login-username">Faculty ID</Label>
+                    <Input id="login-username" name="username" placeholder="Enter your faculty ID" required className="bg-white/50" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="reg-username">Roll No / Faculty ID</Label>
-                    <Input id="reg-username" name="username" required className="bg-white/50" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-role">Role</Label>
-                    <select id="reg-role" name="role" required className="flex h-10 w-full rounded-md border border-input bg-white/50 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                      <option value="student">Student</option>
-                      <option value="teacher">Teacher</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-password">Password</Label>
-                    <Input id="reg-password" name="password" type="password" required className="bg-white/50" />
+                    <div className="flex justify-between items-center">
+                      <Label htmlFor="login-password">Password</Label>
+                      <span className="text-xs text-primary hover:underline cursor-pointer">Forgot password?</span>
+                    </div>
+                    <Input id="login-password" name="password" type="password" placeholder="Enter your password" required className="bg-white/50" />
                   </div>
                   <Button type="submit" className="w-full mt-4 h-11 text-base font-medium shadow-md transition-transform hover:-translate-y-0.5" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Create Account"}
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Teacher Login"}
                   </Button>
                 </form>
               </TabsContent>

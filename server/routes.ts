@@ -1,12 +1,18 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import express from "express";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
-import multer from "multer";
+import multer, { diskStorage } from "multer";
+import bcrypt from "bcrypt";
 import path from "path";
 import fs from "fs";
+import * as XLSX from 'xlsx';
+import { db } from "./db";
+import { users, subjects, studentSubjects, attendance, leaves } from "../shared/schema";
+import { eq } from "drizzle-orm";
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -14,8 +20,31 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
-// Setup multer for file uploads
-const upload = multer({ dest: 'uploads/' });
+// Setup multer for file uploads (PDF only)
+const upload = multer({ 
+  dest: 'uploads/',
+  fileFilter: (req, file, cb) => {
+    // Accept PDF files only
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'), false);
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+      // Ensure .pdf extension
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, file.fieldname + '-' + uniqueSuffix + '.pdf');
+    }
+  })
+});
 
 const JWT_SECRET = process.env.SESSION_SECRET || 'supersecretjwtkey';
 
@@ -61,8 +90,8 @@ export async function registerRoutes(
       const { username, password } = api.auth.login.input.parse(req.body);
       const user = await storage.getUserByUsername(username);
       
-      // In a real app we'd compare hashed passwords
-      if (!user || user.password !== password) {
+      // Compare hashed passwords
+      if (!user || !(await bcrypt.compare(password, user.password))) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
@@ -119,10 +148,7 @@ export async function registerRoutes(
   app.get(api.teacher.subjectStudents.path, authenticateJWT, requireRole('teacher'), async (req, res) => {
     const subjectId = parseInt(req.params.id);
     const students = await storage.getStudentsBySubject(subjectId);
-    res.status(200).json(students.map(s => {
-      const { password, ...rest } = s;
-      return rest;
-    }));
+    res.status(200).json(students);
   });
 
   app.post(api.teacher.markAttendance.path, authenticateJWT, requireRole('teacher'), async (req, res) => {
@@ -146,6 +172,38 @@ export async function registerRoutes(
   app.get(api.teacher.leaves.path, authenticateJWT, requireRole('teacher'), async (req, res) => {
     const leaves = await storage.getAllPendingLeaves();
     res.status(200).json(leaves);
+  });
+
+  app.get('/api/teacher/attendance/:subjectId', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const subjectId = parseInt(req.params.subjectId);
+      const date = req.query.date as string;
+      
+      let attendanceRecords;
+      if (date) {
+        // Get attendance for specific date
+        attendanceRecords = await storage.getAttendanceBySubjectAndDate(subjectId, new Date(date));
+      } else {
+        // Get all attendance for subject
+        attendanceRecords = await storage.getAttendanceBySubject(subjectId);
+      }
+      
+      // Join with student information
+      const recordsWithStudents = await Promise.all(
+        attendanceRecords.map(async (record) => {
+          const student = await storage.getUser(record.studentId);
+          return {
+            ...record,
+            studentName: student?.name || 'Unknown',
+            rollNumber: student?.username || 'Unknown'
+          };
+        })
+      );
+      
+      res.status(200).json(recordsWithStudents);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch attendance records" });
+    }
   });
 
   app.post(api.teacher.updateLeave.path, authenticateJWT, requireRole('teacher'), async (req, res) => {
@@ -251,7 +309,7 @@ export async function registerRoutes(
     res.status(200).json(leaves);
   });
 
-  app.post(api.student.applyLeave.path, authenticateJWT, requireRole('student'), upload.single('document'), async (req, res) => {
+  app.post('/api/student/leaves/apply', authenticateJWT, requireRole('student'), upload.single('document'), async (req, res) => {
     try {
       const studentId = (req as any).user.id;
       const { type, reason, date } = req.body;
@@ -262,7 +320,8 @@ export async function registerRoutes(
         type,
         reason,
         date: new Date(date),
-        documentUrl
+        documentUrl,
+        status: 'pending'
       });
       
       res.status(201).json(leave);
@@ -271,47 +330,349 @@ export async function registerRoutes(
     }
   });
 
-  // Seed DB script to run on startup
-  seedDatabase().catch(console.error);
+  // Seed DB script to run on startup - DISABLED to prevent dummy data
+  // seedDatabase().catch(console.error);
+
+  app.get('/api/teacher/download-attendance/:subjectId', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const subjectId = parseInt(req.params.subjectId);
+      const date = req.query.date as string;
+      
+      let attendanceRecords;
+      if (date) {
+        attendanceRecords = await storage.getAttendanceBySubjectAndDate(subjectId, new Date(date));
+      } else {
+        attendanceRecords = await storage.getAttendanceBySubject(subjectId);
+      }
+      
+      // Join with student information
+      const recordsWithStudents = await Promise.all(
+        attendanceRecords.map(async (record) => {
+          const student = await storage.getUser(record.studentId);
+          return {
+            ...record,
+            studentName: student?.name || 'Unknown',
+            rollNumber: student?.username || 'Unknown'
+          };
+        })
+      );
+      
+      // Create Excel workbook with proper formatting
+      const wb = XLSX.utils.book_new();
+      
+      // Create CSV-style data (tab-separated values)
+      const csvData = recordsWithStudents.map(record => [
+        record.date.toISOString().split('T')[0],
+        record.timeSlot || '',
+        record.studentName || '',
+        record.rollNumber || '',
+        record.status || ''
+      ]);
+      
+      // Add headers as first row
+      const headers = ['Date', 'Time Slot', 'Student Name', 'Roll Number', 'Status'];
+      const allData = [headers, ...csvData];
+      
+      const ws = XLSX.utils.aoa_to_sheet(allData);
+      
+      // Set column widths
+      const colWidths = [
+        { wch: 15 }, // Date
+        { wch: 20 }, // Time Slot
+        { wch: 35 }, // Student Name
+        { wch: 18 }, // Roll Number
+        { wch: 12 }  // Status
+      ];
+      ws['!cols'] = colWidths;
+      
+      wb.SheetNames.push('Attendance Records');
+      wb.Sheets.push(ws);
+      
+      const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      const dateStr = date || '';
+      res.setHeader('Content-Disposition', `attachment; filename="attendance-${subjectId}${dateStr ? `-${dateStr}` : ''}.xlsx"`);
+      res.send(excelBuffer);
+    } catch (error: any) {
+      console.error('Excel download error:', error);
+      res.status(500).json({ message: "Failed to download Excel file: " + error.message });
+    }
+  });
+
+  // Assignment routes
+  app.post('/api/teacher/assignments', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const teacherId = (req as any).user.id;
+      const { title, description, subjectId, dueDate, maxScore = 10 } = req.body;
+      
+      const assignment = await storage.createAssignment({
+        title,
+        description,
+        subjectId,
+        teacherId,
+        dueDate: new Date(dueDate),
+        maxScore
+      });
+      
+      res.status(201).json(assignment);
+    } catch (error: any) {
+      res.status(400).json({ message: "Failed to create assignment" });
+    }
+  });
+
+  app.get('/api/teacher/assignments', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const teacherId = (req as any).user.id;
+      const assignments = await storage.getAssignmentsByTeacher(teacherId);
+      res.status(200).json(assignments);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch assignments" });
+    }
+  });
+
+  app.get('/api/student/assignments', authenticateJWT, requireRole('student'), async (req, res) => {
+    try {
+      const studentId = (req as any).user.id;
+      const assignments = await storage.getAssignmentsByStudent(studentId);
+      res.status(200).json(assignments);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch assignments" });
+    }
+  });
+
+  app.post('/api/student/assignments/:id/submit', authenticateJWT, requireRole('student'), upload.single('file'), async (req, res) => {
+    try {
+      const studentId = (req as any).user.id;
+      const assignmentId = parseInt(req.params.id);
+      const { content } = req.body;
+      const fileUrl = req.file ? `/uploads/${req.file.filename}` : null;
+      
+      const submission = await storage.submitAssignment({
+        assignmentId,
+        studentId,
+        content,
+        fileUrl
+      });
+      
+      res.status(201).json(submission);
+    } catch (error: any) {
+      res.status(400).json({ message: "Failed to submit assignment" });
+    }
+  });
+
+  app.get('/api/teacher/assignments/:id/submissions', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const assignmentId = parseInt(req.params.id);
+      const submissions = await storage.getSubmissionsByAssignment(assignmentId);
+      
+      // Join with student information
+      const submissionsWithStudents = await Promise.all(
+        submissions.map(async (submission) => {
+          const student = await storage.getUser(submission.studentId);
+          return {
+            ...submission,
+            studentName: student?.name || 'Unknown',
+            rollNumber: student?.username || 'Unknown'
+          };
+        })
+      );
+      
+      res.status(200).json(submissionsWithStudents);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch submissions" });
+    }
+  });
+
+  app.post('/api/teacher/submissions/:id/grade', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const submissionId = parseInt(req.params.id);
+      const { score, feedback } = req.body;
+      
+      const gradedSubmission = await storage.gradeSubmission(submissionId, score, feedback);
+      res.status(200).json(gradedSubmission);
+    } catch (error: any) {
+      res.status(400).json({ message: "Failed to grade submission" });
+    }
+  });
+
+  app.get('/api/student/submissions', authenticateJWT, requireRole('student'), async (req, res) => {
+    try {
+      const studentId = (req as any).user.id;
+      const submissions = await storage.getSubmissionsByStudent(studentId);
+      res.status(200).json(submissions);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch submissions" });
+    }
+  });
+
+  // Teacher notes routes
+  app.post('/api/teacher/notes', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const teacherId = (req as any).user.id;
+      const { studentId, subjectId, note, type = 'general', isPrivate = false } = req.body;
+      
+      // If "all" students selected, create notes for all students in the subject
+      if (studentId === 'all') {
+        const students = await storage.getStudentsBySubject(parseInt(subjectId));
+        const notes = [];
+        
+        for (const student of students) {
+          const teacherNote = await storage.createTeacherNote({
+            teacherId,
+            studentId: student.studentId,
+            subjectId: parseInt(subjectId),
+            note,
+            type,
+            isPrivate
+          });
+          notes.push(teacherNote);
+        }
+        
+        res.status(201).json({ message: `Notes created for ${notes.length} students`, notes });
+      } else {
+        // Create note for single student
+        const teacherNote = await storage.createTeacherNote({
+          teacherId,
+          studentId: parseInt(studentId),
+          subjectId: parseInt(subjectId),
+          note,
+          type,
+          isPrivate
+        });
+        
+        res.status(201).json(teacherNote);
+      }
+    } catch (error: any) {
+      res.status(400).json({ message: "Failed to create note" });
+    }
+  });
+
+  app.get('/api/teacher/notes', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const teacherId = (req as any).user.id;
+      const notes = await storage.getNotesByTeacher(teacherId);
+      
+      // Join with student information
+      const notesWithStudents = await Promise.all(
+        notes.map(async (note) => {
+          const student = await storage.getUser(note.studentId);
+          const subject = await db.select().from(subjects).where(eq(subjects.id, note.subjectId)).limit(1);
+          return {
+            ...note,
+            studentName: student?.name || 'Unknown',
+            rollNumber: student?.username || 'Unknown',
+            subjectName: subject[0]?.name || 'Unknown'
+          };
+        })
+      );
+      
+      res.status(200).json(notesWithStudents);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch notes" });
+    }
+  });
+
+  app.get('/api/student/notes', authenticateJWT, requireRole('student'), async (req, res) => {
+    try {
+      const studentId = (req as any).user.id;
+      const notes = await storage.getNotesByStudent(studentId);
+      
+      // Filter out private notes and join with teacher/subject info
+      const publicNotes = notes.filter(note => !note.isPrivate);
+      const notesWithDetails = await Promise.all(
+        publicNotes.map(async (note) => {
+          const teacher = await storage.getUser(note.teacherId);
+          const subject = await db.select().from(subjects).where(eq(subjects.id, note.subjectId)).limit(1);
+          return {
+            ...note,
+            teacherName: teacher?.name || 'Unknown',
+            subjectName: subject[0]?.name || 'Unknown'
+          };
+        })
+      );
+      
+      res.status(200).json(notesWithDetails);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch notes" });
+    }
+  });
+
+  // Subject Notes routes
+  app.post('/api/teacher/subject-notes', authenticateJWT, requireRole('teacher'), upload.single('file'), async (req, res) => {
+    try {
+      const teacherId = (req as any).user.id;
+      const { title, content, unit, topic, subjectId, isPublic } = req.body;
+      
+      const noteData = {
+        title,
+        content,
+        unit,
+        topic,
+        subjectId: parseInt(subjectId),
+        teacherId,
+        isPublic: isPublic === 'true',
+        fileUrl: req.file ? `/uploads/${req.file.filename}` : undefined
+      };
+      
+      const subjectNote = await storage.createSubjectNote(noteData);
+      res.status(201).json(subjectNote);
+    } catch (error: any) {
+      console.error('Create subject note error:', error);
+      res.status(400).json({ message: "Failed to create subject note: " + error.message });
+    }
+  });
+
+  app.get('/api/teacher/subject-notes', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const teacherId = (req as any).user.id;
+      const notes = await storage.getSubjectNotesByTeacher(teacherId);
+      
+      // Join with subject info
+      const notesWithDetails = await Promise.all(
+        notes.map(async (note) => {
+          const subject = await db.select().from(subjects).where(eq(subjects.id, note.subjectId)).limit(1);
+          return {
+            ...note,
+            subjectName: subject[0]?.name || 'Unknown'
+          };
+        })
+      );
+      
+      res.status(200).json(notesWithDetails);
+    } catch (error: any) {
+      console.error('Fetch subject notes error:', error);
+      res.status(500).json({ message: "Failed to fetch subject notes" });
+    }
+  });
+
+  app.get('/api/student/subject-notes', authenticateJWT, requireRole('student'), async (req, res) => {
+    try {
+      const studentId = (req as any).user.id;
+      const notes = await storage.getSubjectNotesByStudent(studentId);
+      
+      // Join with teacher and subject info
+      const notesWithDetails = await Promise.all(
+        notes.map(async (note) => {
+          const teacher = await storage.getUser(note.teacherId);
+          const subject = await db.select().from(subjects).where(eq(subjects.id, note.subjectId)).limit(1);
+          return {
+            ...note,
+            teacherName: teacher?.name || 'Unknown',
+            subjectName: subject[0]?.name || 'Unknown'
+          };
+        })
+      );
+      
+      res.status(200).json(notesWithDetails);
+    } catch (error: any) {
+      console.error('Fetch student subject notes error:', error);
+      res.status(500).json({ message: "Failed to fetch subject notes" });
+    }
+  });
+
+  // Serve uploaded files statically
+  app.use('/uploads', express.static('uploads'));
 
   return httpServer;
-}
-
-async function seedDatabase() {
-  const teacher = await storage.getUserByUsername("T001");
-  if (!teacher) {
-    const t = await storage.createUser({
-      username: "T001",
-      password: "password",
-      role: "teacher",
-      name: "Dr. Smith"
-    });
-    const s1 = await storage.createUser({
-      username: "S001",
-      password: "password",
-      role: "student",
-      name: "Alice Johnson"
-    });
-    const s2 = await storage.createUser({
-      username: "S002",
-      password: "password",
-      role: "student",
-      name: "Bob Williams"
-    });
-
-    const sub1 = await storage.createSubject({
-      name: "Computer Science 101",
-      code: "CS101",
-      teacherId: t.id,
-      semester: 1
-    });
-
-    await storage.assignStudentToSubject(s1.id, sub1.id);
-    await storage.assignStudentToSubject(s2.id, sub1.id);
-
-    await storage.markAttendance([
-      { subjectId: sub1.id, studentId: s1.id, date: new Date(), timeSlot: "10:00 AM", status: "present" },
-      { subjectId: sub1.id, studentId: s2.id, date: new Date(), timeSlot: "10:00 AM", status: "absent" }
-    ]);
-  }
 }

@@ -133,7 +133,7 @@ export const api = {
     },
     applyLeave: {
       method: 'POST' as const,
-      path: '/api/student/leaves' as const,
+      path: '/api/student/leaves/apply' as const,
       responses: {
         201: z.any()
       }
