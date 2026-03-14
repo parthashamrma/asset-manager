@@ -1,6 +1,6 @@
 
 [build]
-  publish = "dist"
+  publish = "dist/public"
   command = "npm run build"
 
 [build.environment]
@@ -19,4 +19,8 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+
+[build]
+  # Ignore secrets in netlify/functions/api.js (temporary file)
+  ignore = "netlify/functions/api.js"
   
