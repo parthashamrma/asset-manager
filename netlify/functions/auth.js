@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import { users } from '../../shared/schema.js';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 
 // Database connection
 const connectionString = process.env.DATABASE_URL;
@@ -46,8 +47,8 @@ export async function handler(event, context) {
 
       const userData = user[0];
       
-      // Simple password check (you should use bcrypt in production)
-      if (userData.password !== password) {
+      // Compare hashed passwords using bcrypt
+      if (!(await bcrypt.compare(password, userData.password))) {
         return {
           statusCode: 401,
           headers: corsHeaders,
