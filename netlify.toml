@@ -1,51 +1,14 @@
 
 [build]
-  publish = "dist/public"
+  publish = "dist"
   command = "npm run build"
-  # Ignore secrets in netlify/functions/api.js (temporary file)
-  ignore = "netlify/functions/api.js"
 
 [build.environment]
   NODE_VERSION = "18"
 
 [[redirects]]
-  from = "/api/auth/*"
-  to = "/.netlify/functions/auth"
-  status = 200
-
-[[redirects]]
-  from = "/api/teacher/dashboard"
-  to = "/.netlify/functions/dashboard"
-  status = 200
-
-[[redirects]]
-  from = "/api/student/dashboard"
-  to = "/.netlify/functions/dashboard"
-  status = 200
-
-[[redirects]]
-  from = "/api/teacher/attendance"
-  to = "/.netlify/functions/attendance"
-  status = 200
-
-[[redirects]]
-  from = "/api/teacher/attendance/*"
-  to = "/.netlify/functions/attendance"
-  status = 200
-
-[[redirects]]
-  from = "/api/upload"
-  to = "/.netlify/functions/upload"
-  status = 200
-
-[[redirects]]
-  from = "/api/upload/*"
-  to = "/.netlify/functions/upload"
-  status = 200
-
-[[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api"
+  to = "/.netlify/functions/:splat"
   status = 200
 
 [[redirects]]

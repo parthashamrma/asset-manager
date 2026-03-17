@@ -289,6 +289,12 @@ export class DatabaseStorage implements IStorage {
     return updatedNote;
   }
 
+  async getLeavesByStatus(status: string): Promise<Leave[]> {
+    return db.select().from(leaves)
+      .where(eq(leaves.status, status))
+      .orderBy(leaves.createdAt, 'desc');
+  }
+
   async deleteSubjectNote(id: number): Promise<void> {
     await db.delete(subjectNotes).where(eq(subjectNotes.id, id));
   }

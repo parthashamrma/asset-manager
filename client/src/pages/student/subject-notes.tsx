@@ -83,6 +83,25 @@ export function StudentSubjectNotes() {
     return acc;
   }, {} as Record<string, SubjectNote[]>);
 
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    try {
+      // Create download link for Cloudinary file
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.target = '_blank';
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
+
+  const handleView = (fileUrl: string) => {
+    window.open(fileUrl, '_blank');
+  };
+
   const getUnitBadge = (unit: string) => {
     const colors = [
       "bg-blue-100 text-blue-800",
@@ -185,12 +204,20 @@ export function StudentSubjectNotes() {
                           </div>
                         </div>
                         <div className="flex gap-2 ml-4">
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleView(note.fileUrl || '')}
+                          >
                             <Eye className="w-3 h-3 mr-1" />
                             View
                           </Button>
                           {note.fileUrl && (
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleDownload(note.fileUrl, `${note.title}.pdf`)}
+                            >
                               <Download className="w-3 h-3 mr-1" />
                               Download
                             </Button>

@@ -82,6 +82,25 @@ export function TeacherSubjectNotes() {
   });
 
   // Create note mutation
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    try {
+      // Create download link for Cloudinary file
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.target = '_blank';
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
+
+  const handleView = (fileUrl: string) => {
+    window.open(fileUrl, '_blank');
+  };
+
   const createNoteMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const formDataToSend = new FormData();
@@ -117,6 +136,31 @@ export function TeacherSubjectNotes() {
       toast({ title: "Error", description: "Failed to create subject note", variant: "destructive" });
     }
   });
+
+  // Delete note mutation
+  const deleteNoteMutation = useMutation({
+    mutationFn: async (noteId: number) => {
+      const response = await fetch(`/api/teacher/subject-notes/${noteId}`, {
+        method: "DELETE",
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error("Failed to delete subject note");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teacher-subject-notes"] });
+      toast({ title: "Success", description: "Subject note deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete subject note", variant: "destructive" });
+    }
+  });
+
+  const handleDelete = async (noteId: number) => {
+    if (window.confirm('Are you sure you want to delete this subject note? This action cannot be undone.')) {
+      deleteNoteMutation.mutate(noteId);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -347,7 +391,12 @@ export function TeacherSubjectNotes() {
                             <Edit className="w-3 h-3 mr-1" />
                             Edit
                           </Button>
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDelete(note.id)}
+                            disabled={deleteNoteMutation.isPending}
+                          >
                             <Trash2 className="w-3 h-3 mr-1" />
                             Delete
                           </Button>
@@ -363,12 +412,20 @@ export function TeacherSubjectNotes() {
                           Created: {new Date(note.createdAt).toLocaleDateString()}
                         </p>
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleView(note.fileUrl || '')}
+                          >
                             <Eye className="w-3 h-3 mr-1" />
                             View
                           </Button>
                           {note.fileUrl && (
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleDownload(note.fileUrl, `${note.title}.pdf`)}
+                            >
                               <Download className="w-3 h-3 mr-1" />
                               Download
                             </Button>

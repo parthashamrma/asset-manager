@@ -9,14 +9,26 @@ import {
   BookOpen
 } from "lucide-react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 
 export function TeacherDashboard() {
   const { user } = useAuth();
   
+  // Fetch real pending leaves count
+  const { data: pendingLeaves } = useQuery({
+    queryKey: ["pending-leaves"],
+    queryFn: async () => {
+      const response = await fetch("/api/teacher/leaves?status=pending", { credentials: 'include' });
+      if (!response.ok) throw new Error("Failed to fetch pending leaves");
+      const data = await response.json();
+      return data.length; // Return count
+    }
+  });
+
   // Mock summary stats (ideally fetched from an overview endpoint)
   const stats = [
     { title: "Classes Today", value: "3", icon: Users, color: "text-blue-500", bg: "bg-blue-100" },
-    { title: "Pending Leaves", value: "5", icon: CalendarDays, color: "text-orange-500", bg: "bg-orange-100" },
+    { title: "Pending Leaves", value: pendingLeaves || "0", icon: CalendarDays, color: "text-orange-500", bg: "bg-orange-100" },
     { title: "Overall Attendance", value: "84%", icon: ClipboardCheck, color: "text-emerald-500", bg: "bg-emerald-100" },
   ];
 

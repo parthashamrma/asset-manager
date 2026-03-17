@@ -5,45 +5,40 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
-import multer, { diskStorage } from "multer";
+import multer from "multer";
 import bcrypt from "bcrypt";
 import path from "path";
 import fs from "fs";
 import * as XLSX from 'xlsx';
 import { db } from "./db";
 import { users, subjects, studentSubjects, attendance, leaves } from "../shared/schema";
+import { subjectNotes } from "../shared/schema-notes";
 import { eq } from "drizzle-orm";
+import { cloudinaryStorage } from "./cloudinary-config";
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
-// Setup multer for file uploads (PDF only)
+// Setup multer for file uploads using Cloudinary
 const upload = multer({ 
-  dest: 'uploads/',
+  storage: cloudinaryStorage,
   fileFilter: (req, file, cb) => {
-    // Accept PDF files only
-    if (file.mimetype === 'application/pdf') {
+    // Accept PDF, DOC, DOCX, images
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'text/plain'
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF files are allowed'), false);
+      cb(new Error('Only PDF, DOC, DOCX, and image files are allowed'), false);
     }
   },
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-      // Ensure .pdf extension
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      cb(null, file.fieldname + '-' + uniqueSuffix + '.pdf');
-    }
-  })
+  }
 });
 
 const JWT_SECRET = process.env.SESSION_SECRET || 'supersecretjwtkey';
@@ -169,9 +164,24 @@ export async function registerRoutes(
     }
   });
 
-  app.get(api.teacher.leaves.path, authenticateJWT, requireRole('teacher'), async (req, res) => {
-    const leaves = await storage.getAllPendingLeaves();
-    res.status(200).json(leaves);
+  app.get('/api/teacher/leaves', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const status = req.query.status as string; // 'pending', 'approved', 'rejected', or undefined for all
+      console.log('📋 Teacher fetching leaves with status:', status);
+      
+      let leaves;
+      if (status) {
+        leaves = await storage.getLeavesByStatus(status);
+      } else {
+        leaves = await storage.getAllPendingLeaves(); // Fallback to existing method
+      }
+      
+      console.log('✅ Leaves fetched:', { count: leaves.length, status });
+      res.status(200).json(leaves);
+    } catch (error: any) {
+      console.error('❌ Fetch teacher leaves error:', error);
+      res.status(500).json({ message: "Failed to fetch leaves" });
+    }
   });
 
   app.get('/api/teacher/attendance/:subjectId', authenticateJWT, requireRole('teacher'), async (req, res) => {
@@ -313,7 +323,14 @@ export async function registerRoutes(
     try {
       const studentId = (req as any).user.id;
       const { type, reason, date } = req.body;
-      const documentUrl = req.file ? `/uploads/${req.file.filename}` : null;
+      
+      // Handle Cloudinary file upload
+      let documentUrl = null;
+      if (req.file) {
+        // For Cloudinary storage, the file info is in req.file
+        documentUrl = req.file.path || req.file.secure_url || null;
+        console.log('📎 Cloudinary file uploaded:', { filename: req.file.originalname, url: documentUrl });
+      }
 
       const leave = await storage.applyLeave({
         studentId,
@@ -324,9 +341,11 @@ export async function registerRoutes(
         status: 'pending'
       });
       
+      console.log('✅ Leave application created:', { studentId, type, documentUrl });
       res.status(201).json(leave);
     } catch (err) {
-      res.status(400).json({ message: "Invalid input" });
+      console.error('❌ Leave application error:', err);
+      res.status(400).json({ message: "Invalid input: " + err.message });
     }
   });
 
@@ -446,7 +465,7 @@ export async function registerRoutes(
       const studentId = (req as any).user.id;
       const assignmentId = parseInt(req.params.id);
       const { content } = req.body;
-      const fileUrl = req.file ? `/uploads/${req.file.filename}` : null;
+      const fileUrl = req.file ? req.file.path : null;  // Cloudinary URL
       
       const submission = await storage.submitAssignment({
         assignmentId,
@@ -612,7 +631,7 @@ export async function registerRoutes(
         subjectId: parseInt(subjectId),
         teacherId,
         isPublic: isPublic === 'true',
-        fileUrl: req.file ? `/uploads/${req.file.filename}` : undefined
+        fileUrl: req.file ? req.file.path : undefined  // Cloudinary URL
       };
       
       const subjectNote = await storage.createSubjectNote(noteData);
@@ -643,6 +662,52 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error('Fetch subject notes error:', error);
       res.status(500).json({ message: "Failed to fetch subject notes" });
+    }
+  });
+
+  app.delete('/api/teacher/subject-notes/:id', authenticateJWT, requireRole('teacher'), async (req, res) => {
+    try {
+      const teacherId = (req as any).user.id;
+      const noteId = parseInt(req.params.id);
+      
+      console.log('🗑️ Deleting note:', { noteId, teacherId });
+      
+      // Verify teacher owns this note
+      const note = await db.select().from(subjectNotes)
+        .where(eq(subjectNotes.id, noteId))
+        .limit(1);
+      
+      if (!note[0]) {
+        console.log('❌ Note not found:', noteId);
+        return res.status(404).json({ message: "Subject note not found" });
+      }
+      
+      if (note[0].teacherId !== teacherId) {
+        console.log('❌ Unauthorized deletion attempt:', { noteTeacherId: note[0].teacherId, requestTeacherId: teacherId });
+        return res.status(403).json({ message: "You can only delete your own notes" });
+      }
+      
+      console.log('✅ Note verified for deletion:', note[0]);
+      
+      // Delete from Cloudinary if file exists
+      if (note[0].fileUrl) {
+        try {
+          console.log('🌐 Cloudinary file URL:', note[0].fileUrl);
+          // Note: Cloudinary deletion requires admin API key
+          // For now, we'll just remove from database
+        } catch (error) {
+          console.warn('⚠️ Failed to delete from Cloudinary:', error);
+        }
+      }
+      
+      // Delete from database
+      await storage.deleteSubjectNote(noteId);
+      console.log('✅ Note deleted successfully:', noteId);
+      
+      res.status(200).json({ message: "Subject note deleted successfully" });
+    } catch (error: any) {
+      console.error('❌ Delete subject note error:', error);
+      res.status(500).json({ message: "Failed to delete subject note: " + error.message });
     }
   });
 
